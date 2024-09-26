@@ -1,0 +1,240 @@
+
+To create a container image from an AWS base image for Python
+
+    Create a directory for the project, and then switch to that directory.
+
+mkdir example
+cd example
+
+Create a new file called lambda_function.py. You can add the following sample function code to the file for testing, or use your own.
+Example Python function
+
+import sys
+def handler(event, context):
+    return 'Hello from AWS Lambda using Python' + sys.version + '!'
+
+Create a new file called requirements.txt. If you're using the sample function code from the previous step, you can leave the file empty because there are no dependencies. Otherwise, list each required library. For example, here's what your requirements.txt should look like if your function uses the AWS SDK for Python (Boto3):
+Example requirements.txt
+
+boto3
+
+Create a new Dockerfile with the following configuration:
+
+    Set the FROM property to the URI of the base image
+
+    .
+
+    Use the COPY command to copy the function code and runtime dependencies to {LAMBDA_TASK_ROOT}.
+
+    Set the CMD argument to the Lambda function handler.
+
+Example Dockerfile
+
+FROM public.ecr.aws/lambda/python:3.11
+
+# Copy requirements.txt
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
+
+# Copy function code
+COPY lambda_function.py ${LAMBDA_TASK_ROOT}
+
+# Install the specified packages
+RUN pip install -r requirements.txt
+
+# Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
+CMD [ "lambda_function.handler" ]
+
+Build the Docker image with the docker build
+command. The following example names the image docker-image and gives it the test tag
+
+.
+
+docker build --platform linux/amd64 -t docker-image:test .
+**** NOTE: CHANGE THIS TO arm64 ****
+
+
+
+docker build --platform linux/amd64 -t blank-image:template .
+
+
+
+
+
+Test the image locally
+
+    Start the Docker image with the docker run command. In this example, docker-image is the image name and test is the tag.
+
+docker run -p 9000:8080 docker-image:test
+docker run -p 9000:8080 blank-image:template
+
+
+
+This command runs the image as a container and creates a local endpoint at localhost:9000/2015-03-31/functions/function/invocations.
+
+From a new terminal window, post an event to the following endpoint using a curl command:
+
+curl "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
+
+curl "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"Event":"event", "Handler":"This is a generic handler"}'
+
+This command invokes the function with an empty event and returns a response. If you're using your own function code rather than the sample function code, you might want to invoke the function with a JSON payload. Example:
+
+curl "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"payload":"hello world!"}'
+
+Get the container ID.
+
+docker ps
+
+Use the docker kill
+
+command to stop the container. In this command, replace 3766c4ab331c with the container ID from the previous step.
+
+docker kill 3766c4ab331c
+
+
+
+To upload the image to Amazon ECR and create the Lambda function
+
+    Run the get-login-password
+
+command to authenticate the Docker CLI to your Amazon ECR registry.
+
+    Set the --region value to the AWS Region where you want to create the Amazon ECR repository.
+
+    Replace 111122223333 with your AWS account ID.
+
+    # arn:aws:lambda:us-east-2:926113637390:function:remove-background
+
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 111122223333.dkr.ecr.us-east-1.amazonaws.com
+
+aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 926113637390.dkr.ecr.us-east-2.amazonaws.com
+
+
+
+<rebuild with repo name>
+
+docker tag containertainment_center:blank-image 926113637390.dkr.ecr.us-east-2.amazonaws.com/containertainment_center:blank-image
+
+
+
+
+docker push 926113637390.dkr.ecr.us-east-2.amazonaws.com/containertainment_center:blank-image
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Create a repository in Amazon ECR using the create-repository
+
+command.
+
+aws ecr create-repository --repository-name hello-world --image-scanning-configuration scanOnPush=true --image-tag-mutability MUTABLE
+
+If successful, you see a response like this:
+
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-1:111122223333:repository/hello-world",
+        "registryId": "111122223333",
+        "repositoryName": "hello-world",
+        "repositoryUri": "111122223333.dkr.ecr.us-east-1.amazonaws.com/hello-world",
+        "createdAt": "2023-03-09T10:39:01+00:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": true
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
+
+Copy the repositoryUri from the output in the previous step.
+
+
+(base) sean@knightmare ~ % aws ecr create-repository --repository-name hello-world --image-scanning-configuration scanOnPush=true --image-tag-mutability MUTABLE
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:926113637390:repository/hello-world",
+        "registryId": "926113637390",
+        "repositoryName": "hello-world",
+        "repositoryUri": "926113637390.dkr.ecr.us-east-2.amazonaws.com/hello-world",
+        "createdAt": "2023-08-23T17:34:42-07:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": true
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
+
+
+
+
+
+
+
+926113637390.dkr.ecr.us-east-2.amazonaws.com/hello-world
+
+Run the docker tag
+
+command to tag your local image into your Amazon ECR repository as the latest version. In this command:
+
+    Replace docker-image:test with the name and tag
+
+    of your Docker image.
+
+    Replace <ECRrepositoryUri> with the repositoryUri that you copied. Make sure to include :latest at the end of the URI.
+
+docker tag docker-image:test <ECRrepositoryUri>:latest
+
+
+docker tag docker-image:test 926113637390.dkr.ecr.us-east-2.amazonaws.com/hello-world:latest
+
+Example:
+docker tag docker-image:test 111122223333.dkr.ecr.us-east-1.amazonaws.com/hello-world:latest
+
+Run the docker push command to deploy your local image to the Amazon ECR repository. Make sure to include :latest at the end of the repository URI.
+
+docker push 111122223333.dkr.ecr.us-east-1.amazonaws.com/hello-world:latest
+
+docker push 926113637390.dkr.ecr.us-east-2.amazonaws.com/hello-world:latest
+
+Create an execution role for the function, if you don't already have one. You need the Amazon Resource Name (ARN) of the role in the next step.
+
+Create the Lambda function. For ImageUri, specify the repository URI from earlier. Make sure to include :latest at the end of the URI.
+
+aws lambda create-function \
+  --function-name hello-world \
+  --package-type Image \
+  --code ImageUri=111122223333.dkr.ecr.us-east-1.amazonaws.com/hello-world:latest \
+  --role arn:aws:iam::111122223333:role/lambda-ex
+
+Invoke the function.
+
+aws lambda invoke --function-name hello-world response.json
+
+You should see a response like this:
+
+    {
+      "ExecutedVersion": "$LATEST", 
+      "StatusCode": 200
+    }
+
+    To see the output of the function, check the response.json file.
+
+To update the function code, you must build the image again, upload the new image to the Amazon ECR repository, and then use the update-function-code
+command to deploy the image to the Lambda function.
